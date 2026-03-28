@@ -70,16 +70,33 @@ npm run build
 - 音色仅基础振荡器，不含采样器/合成器参数面板
 - 暂无项目持久化（刷新页面会重置）
 
-## 下一步演进建议（对接 Harness 循环）
+## Harness 闭环（已加 v0.1）
 
-1. **Planner 阶段**：把需求转成 sprint contract（功能+验收）
-2. **Builder 阶段**：按 contract 产出代码 + 测试
-3. **Evaluator 阶段**：
-   - Playwright 自动走查 UI
-   - 音频行为断言（播放状态、节点调度、峰值检测）
-4. **Governor 阶段**：
-   - 对失败样本归因（需求歧义/规则缺失/测试盲区）
-   - 将经验沉淀到 lint、测试模板、docs 规范
+新增目录与脚本：
+
+- `plans/`：计划模板
+- `reports/build/`：构建报告模板
+- `reports/eval/`：评测报告模板
+- `harness/`：规则、指标、变更日志
+- `scripts/eval.mjs`：自动执行 lint + build，生成评测报告
+- `scripts/govern.mjs`：根据评测结果生成 governor 改进建议
+
+### 执行方式
+
+```bash
+# 1) 跑评测（输出到 reports/eval/<task-id>.md）
+npm run harness:eval -- --task demo-task
+
+# 2) 跑 governor（输出到 harness/metrics/<task-id>-governor.md）
+npm run harness:govern -- --task demo-task
+```
+
+## 下一步演进建议（v0.2+）
+
+1. 接入 Playwright 自动走查 UI（按钮流程、clip 增删、播放状态）
+2. 增加音频行为断言（节拍对齐、峰值阈值、静音轨验证）
+3. 将失败归因自动聚合为周报（失败类型分布、修复收益）
+4. 用 OpenClaw cron 定时回归，形成持续质量扫描
 
 这个项目可作为 OpenClaw 自进化 harness 的标准样本库之一，用于持续比较：
 - 交付时长
