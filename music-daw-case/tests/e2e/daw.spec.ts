@@ -45,4 +45,27 @@ test.describe('DAW MVP e2e', () => {
     await vol.fill('0.33')
     await expect(vol).toHaveValue('0.33')
   })
+
+  test('editing guards should apply during playback and restore after stop', async ({ page }) => {
+    await page.goto('/')
+
+    const bpmInput = page.getByTestId('bpm-input')
+    const addClipBtn = page.getByTestId('add-clip-track-1')
+    const stopBtn = page.getByTestId('stop-btn')
+
+    await expect(bpmInput).toBeEnabled()
+    await expect(addClipBtn).toBeEnabled()
+
+    await page.getByTestId('play-btn').click()
+
+    await expect(page.getByTestId('pause-btn')).toBeEnabled()
+    await expect(bpmInput).toBeDisabled()
+    await expect(addClipBtn).toBeDisabled()
+
+    await stopBtn.click()
+
+    await expect(page.getByTestId('play-btn')).toBeEnabled()
+    await expect(bpmInput).toBeEnabled()
+    await expect(addClipBtn).toBeEnabled()
+  })
 })
