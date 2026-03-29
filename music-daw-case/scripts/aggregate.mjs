@@ -19,6 +19,11 @@ const summary = {
     e2e: 0,
     build: 0,
   },
+  failureTaxonomy: {
+    R3_rules_missing: 0,
+    R4_toolchain_or_build: 0,
+    R6_validation_gap: 0,
+  },
   tasks: [],
 }
 
@@ -36,10 +41,22 @@ for (const file of files) {
   const e2eFail = content.includes('### e2e test (FAIL)')
   const buildFail = content.includes('### build (FAIL)')
 
-  if (lintFail) summary.failedSteps.lint += 1
-  if (unitFail) summary.failedSteps.unit += 1
-  if (e2eFail) summary.failedSteps.e2e += 1
-  if (buildFail) summary.failedSteps.build += 1
+  if (lintFail) {
+    summary.failedSteps.lint += 1
+    summary.failureTaxonomy.R3_rules_missing += 1
+  }
+  if (unitFail) {
+    summary.failedSteps.unit += 1
+    summary.failureTaxonomy.R6_validation_gap += 1
+  }
+  if (e2eFail) {
+    summary.failedSteps.e2e += 1
+    summary.failureTaxonomy.R6_validation_gap += 1
+  }
+  if (buildFail) {
+    summary.failedSteps.build += 1
+    summary.failureTaxonomy.R4_toolchain_or_build += 1
+  }
 
   summary.tasks.push({
     taskId: taskIdMatch?.[1]?.trim() || file.replace('.md', ''),
