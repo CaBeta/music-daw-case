@@ -28,7 +28,7 @@ test.describe('DAW MVP e2e', () => {
     expect(paused).toBe(false)
 
     const firstClip = page.locator('[data-testid^="clip-track-1-"]').first()
-    await firstClip.dblclick()
+    await firstClip.dispatchEvent('dblclick')
     const afterRemove = await page.evaluate(() => window.__DAW_DEBUG__?.clipCount ?? 0)
     expect(afterRemove).toBe(afterAdd - 1)
   })
