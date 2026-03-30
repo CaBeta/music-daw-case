@@ -61,11 +61,16 @@ npm run harness:weekly
 # 生成任务包 + 下一轮计划
 npm run harness:task-pack
 npm run harness:next-plan
+
+# 独立评审 + 一键闭环
+npm run harness:judge -- --task your-task-id
+npm run harness:loop -- --task your-task-id
 ```
 
 产物位置：
 - `harness/metrics/summary.json`
 - `harness/metrics/weekly-YYYY-MM-DD.md`
+- `harness/metrics/judgements/<task-id>.json|md`
 - `harness/task-packs/task-pack-YYYY-MM-DD.md`
 - `plans/auto-next-YYYY-MM-DD.md`
 
