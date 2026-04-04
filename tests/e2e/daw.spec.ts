@@ -858,4 +858,70 @@ test.describe('DAW MVP e2e', () => {
 
     await page.getByTestId('reset-project-btn').click()
   })
+
+  test('clip split should halve selected clip and support inspector + cmd double click path', async ({ page }) => {
+    await page.goto('/')
+
+    await page.getByTestId('reset-project-btn').click()
+
+    const firstClip = page.locator('[data-testid^="clip-track-1-"]').first()
+    await firstClip.click()
+
+    const before = await page.evaluate(() => ({
+      clipCount: window.__DAW_DEBUG__?.clipCount ?? 0,
+      selectedClipLengthBeats: window.__DAW_DEBUG__?.selectedClipLengthBeats ?? 0,
+      canSplit: window.__DAW_DEBUG__?.selectedClipCanSplit,
+      splitBlockedReason: window.__DAW_DEBUG__?.selectedClipSplitBlockedReason,
+    }))
+
+    expect(before.selectedClipLengthBeats).toBe(2)
+    expect(before.canSplit).toBe(true)
+    expect(before.splitBlockedReason).toBe('none')
+
+    await page.getByTestId('selected-clip-split-btn').click()
+
+    const afterInspectorSplit = await page.evaluate(() => ({
+      clipCount: window.__DAW_DEBUG__?.clipCount ?? 0,
+      selectedClipLengthBeats: window.__DAW_DEBUG__?.selectedClipLengthBeats ?? 0,
+      canSplit: window.__DAW_DEBUG__?.selectedClipCanSplit,
+      splitBlockedReason: window.__DAW_DEBUG__?.selectedClipSplitBlockedReason,
+    }))
+
+    expect(afterInspectorSplit.clipCount).toBe(before.clipCount + 1)
+    expect(afterInspectorSplit.selectedClipLengthBeats).toBe(1)
+    expect(afterInspectorSplit.canSplit).toBe(false)
+    expect(afterInspectorSplit.splitBlockedReason).toBe('clipTooShort')
+
+    const track1ClipsAfterInspector = page.locator('[data-testid^="clip-track-1-"]')
+    await expect(track1ClipsAfterInspector).toHaveCount(2)
+
+    const sortedWidthsAfterInspector = await track1ClipsAfterInspector.evaluateAll((elements) =>
+      elements
+        .map((el) => Number.parseFloat((el as HTMLElement).style.width))
+        .sort((a, b) => a - b),
+    )
+    expect(sortedWidthsAfterInspector).toEqual([6.25, 6.25])
+
+    await page.getByTestId('add-clip-track-1').click()
+    const newestClip = page.locator('[data-testid^="clip-track-1-"]').nth(2)
+    await newestClip.dblclick({ modifiers: ['Meta'] })
+
+    const afterMetaSplit = await page.evaluate(() => ({
+      clipCount: window.__DAW_DEBUG__?.clipCount ?? 0,
+      selectedClipLengthBeats: window.__DAW_DEBUG__?.selectedClipLengthBeats ?? 0,
+    }))
+    expect(afterMetaSplit.clipCount).toBe(before.clipCount + 3)
+    expect(afterMetaSplit.selectedClipLengthBeats).toBe(1)
+
+    await page.getByTestId('play-btn').click()
+    const scheduled = await page.evaluate(() => window.__DAW_DEBUG__?.scheduledNodeCount ?? 0)
+    expect(scheduled).toBeGreaterThan(0)
+    await page.getByTestId('stop-btn').click()
+
+    await page.reload()
+    const afterReload = await page.evaluate(() => window.__DAW_DEBUG__?.clipCount ?? 0)
+    expect(afterReload).toBe(before.clipCount + 3)
+
+    await page.getByTestId('reset-project-btn').click()
+  })
 })

@@ -184,6 +184,8 @@ declare global {
       selectedClipScheduledFrequencyHz: number | null
       selectedClipCanDuplicate: boolean
       selectedClipDuplicateBlockedReason: 'none' | 'playing' | 'trackLocked' | 'noSpace' | 'noSelection'
+      selectedClipCanSplit: boolean
+      selectedClipSplitBlockedReason: 'none' | 'playing' | 'trackLocked' | 'clipTooShort' | 'noSelection'
     }
   }
 }
@@ -261,6 +263,7 @@ function App() {
     const desiredStart = clip.startBeat + clip.lengthBeats
     const duplicateStartBeat = resolveNonOverlappingStart(track.clips, clip.lengthBeats, desiredStart, clip.id)
     const canDuplicate = !track.locked && !isPlaying && duplicateStartBeat + clip.lengthBeats <= TIMELINE_BEATS
+    const canSplit = !track.locked && !isPlaying && clip.lengthBeats >= 2
 
     return {
       track,
@@ -268,6 +271,7 @@ function App() {
       scheduledFrequencyHz,
       duplicateStartBeat,
       canDuplicate,
+      canSplit,
     }
   }, [project.tracks, selectedClipRef, isPlaying])
 
@@ -526,6 +530,16 @@ function App() {
             : selectedClipData.canDuplicate
               ? 'none'
               : 'noSpace',
+      selectedClipCanSplit: selectedClipData?.canSplit ?? false,
+      selectedClipSplitBlockedReason: !selectedClipData
+        ? 'noSelection'
+        : isPlaying
+          ? 'playing'
+          : selectedClipData.track.locked
+            ? 'trackLocked'
+            : selectedClipData.canSplit
+              ? 'none'
+              : 'clipTooShort',
     }
   }, [
     isPlaying,
@@ -619,9 +633,9 @@ function App() {
       if (!sourceClip) return prev
 
       const desiredStart = sourceClip.startBeat + sourceClip.lengthBeats
-      const nextStart = resolveNonOverlappingStart(track.clips, sourceClip.lengthBeats, desiredStart)
-      const stillConflicts = track.clips.some((c) =>
-        rangesOverlap(nextStart, sourceClip.lengthBeats, c.startBeat, c.lengthBeats),
+      const nextStart = resolveNonOverlappingStart(track.clips, sourceClip.lengthBeats, desiredStart, clipId)
+      const stillConflicts = track.clips.some(
+        (c) => c.id !== clipId && rangesOverlap(nextStart, sourceClip.lengthBeats, c.startBeat, c.lengthBeats),
       )
       if (stillConflicts) return prev
 
@@ -650,6 +664,53 @@ function App() {
     if (duplicatedClipId) {
       setSelectedTrackId(trackId)
       setSelectedClipRef({ trackId, clipId: duplicatedClipId })
+    }
+  }
+
+  const splitClip = (trackId: string, clipId: string) => {
+    let rightClipId: string | null = null
+
+    applyProjectUpdate((prev) => {
+      const track = prev.tracks.find((t) => t.id === trackId)
+      if (!track || track.locked) return prev
+
+      const sourceClip = track.clips.find((c) => c.id === clipId)
+      if (!sourceClip || sourceClip.lengthBeats < 2) return prev
+
+      const leftLength = Math.max(1, Math.floor(sourceClip.lengthBeats / 2))
+      const rightLength = sourceClip.lengthBeats - leftLength
+      if (rightLength < 1) return prev
+
+      const rightStart = sourceClip.startBeat + leftLength
+      const newRightId = `${sourceClip.id}-split-${Date.now()}`
+      rightClipId = newRightId
+
+      return {
+        ...prev,
+        tracks: prev.tracks.map((t) => {
+          if (t.id !== trackId) return t
+          return {
+            ...t,
+            clips: t.clips.flatMap((c) => {
+              if (c.id !== clipId) return [c]
+              return [
+                { ...c, lengthBeats: leftLength },
+                {
+                  ...c,
+                  id: newRightId,
+                  startBeat: rightStart,
+                  lengthBeats: rightLength,
+                },
+              ]
+            }),
+          }
+        }),
+      }
+    })
+
+    if (rightClipId) {
+      setSelectedTrackId(trackId)
+      setSelectedClipRef({ trackId, clipId: rightClipId })
     }
   }
 
@@ -1130,6 +1191,13 @@ function App() {
             >
               Duplicate Clip
             </button>
+            <button
+              data-testid="selected-clip-split-btn"
+              onClick={() => splitClip(selectedClipData.track.id, selectedClipData.clip.id)}
+              disabled={!selectedClipData.canSplit}
+            >
+              Split Clip
+            </button>
           </div>
         ) : (
           <div className="inspector-empty" data-testid="inspector-clip-empty">Select a clip to edit note pitch.</div>
@@ -1244,6 +1312,10 @@ function App() {
                       removeClip(track.id, clip.id)
                       return
                     }
+                    if (e.metaKey || e.ctrlKey) {
+                      splitClip(track.id, clip.id)
+                      return
+                    }
                     if (e.shiftKey) {
                       duplicateClip(track.id, clip.id)
                       return
@@ -1274,7 +1346,7 @@ function App() {
         ))}
       </section>
 
-      <p className="hint">双击 clip 切换波形；Shift+双击或 Inspector 内 Duplicate Clip 可复制；Alt+双击删除；Lock 可冻结轨道编辑。播放时禁用新增 clip 与 BPM 修改。快捷键：Space 播放/暂停，S 停止，⌘/Ctrl+Z 撤销，⌘/Ctrl+Shift+Z 重做。</p>
+      <p className="hint">双击 clip 切换波形；Shift+双击或 Inspector 内 Duplicate Clip 可复制；⌘/Ctrl+双击或 Inspector 内 Split Clip 可对半切分；Alt+双击删除；Lock 可冻结轨道编辑。播放时禁用新增 clip 与 BPM 修改。快捷键：Space 播放/暂停，S 停止，⌘/Ctrl+Z 撤销，⌘/Ctrl+Shift+Z 重做。</p>
     </div>
   )
 }
