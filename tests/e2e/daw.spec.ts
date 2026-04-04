@@ -675,4 +675,46 @@ test.describe('DAW MVP e2e', () => {
     await page.getByTestId('transpose-track-1').fill('0')
     await page.getByTestId('reset-project-btn').click()
   })
+
+  test('track lock should freeze clip editing workflow and persist across reload', async ({ page }) => {
+    await page.goto('/')
+
+    await page.getByTestId('reset-project-btn').click()
+
+    const lockTrack1 = page.getByTestId('lock-track-1')
+    await lockTrack1.click()
+
+    const debugAfterLock = await page.evaluate(() => window.__DAW_DEBUG__)
+    expect(debugAfterLock?.lockedTrackCount).toBe(1)
+
+    const addClipBtn = page.getByTestId('add-clip-track-1')
+    await expect(addClipBtn).toBeDisabled()
+
+    const clipCountBeforeAdd = await page.evaluate(() => window.__DAW_DEBUG__?.clipCount ?? 0)
+    const clipCountAfterAddAttempt = await page.evaluate(() => window.__DAW_DEBUG__?.clipCount ?? 0)
+    expect(clipCountAfterAddAttempt).toBe(clipCountBeforeAdd)
+
+    const clip = page.locator('[data-testid^="clip-track-1-"]').first()
+    const beforeLeft = await clip.evaluate((el) => Number.parseFloat((el as HTMLElement).style.left))
+
+    const box = await clip.boundingBox()
+    expect(box).not.toBeNull()
+    if (!box) return
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2)
+    await page.mouse.up()
+
+    const afterLeft = await clip.evaluate((el) => Number.parseFloat((el as HTMLElement).style.left))
+    expect(afterLeft).toBe(beforeLeft)
+
+    await page.reload()
+
+    const debugAfterReload = await page.evaluate(() => window.__DAW_DEBUG__)
+    expect(debugAfterReload?.lockedTrackCount).toBe(1)
+
+    await page.getByTestId('lock-track-1').click()
+    await page.getByTestId('reset-project-btn').click()
+  })
 })

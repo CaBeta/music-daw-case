@@ -192,6 +192,11 @@ h1 {
   background: #ff7b6b;
 }
 
+.clip.locked {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
 .hint {
   margin-top: 12px;
   color: #8ea2bf;

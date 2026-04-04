@@ -17,6 +17,7 @@ interface Track {
   volume: number
   muted: boolean
   solo: boolean
+  locked: boolean
   transposeSemitones: number
   clips: Clip[]
 }
@@ -77,6 +78,7 @@ function createInitialProject(): ProjectState {
       volume: 0.7,
       muted: false,
       solo: false,
+      locked: false,
       transposeSemitones: 0,
       clips: [
         {
@@ -103,6 +105,7 @@ function isValidProjectState(value: unknown): value is ProjectState {
       typeof t.volume !== 'number' ||
       typeof t.muted !== 'boolean' ||
       typeof t.solo !== 'boolean' ||
+      (typeof t.locked !== 'boolean' && typeof t.locked !== 'undefined') ||
       typeof t.transposeSemitones !== 'number'
     )
       return false
@@ -127,7 +130,14 @@ function loadInitialProject(): ProjectState {
     if (!raw) return createInitialProject()
     const parsed = JSON.parse(raw)
     if (!isValidProjectState(parsed)) return createInitialProject()
-    return parsed
+
+    return {
+      ...parsed,
+      tracks: parsed.tracks.map((track) => ({
+        ...track,
+        locked: track.locked ?? false,
+      })),
+    }
   } catch {
     return createInitialProject()
   }
@@ -158,6 +168,7 @@ declare global {
       audibleTrackCount: number
       soloTrackCount: number
       soloActive: boolean
+      lockedTrackCount: number
       transposedTrackCount: number
       firstTrackTransposeSemitones: number | null
       scheduledFrequencyPreviewHz: number[]
@@ -219,6 +230,7 @@ function App() {
   )
   const mutedTrackCount = useMemo(() => project.tracks.filter((t) => t.muted).length, [project.tracks])
   const soloTrackCount = useMemo(() => project.tracks.filter((t) => t.solo).length, [project.tracks])
+  const lockedTrackCount = useMemo(() => project.tracks.filter((t) => t.locked).length, [project.tracks])
   const transposedTrackCount = useMemo(
     () => project.tracks.filter((t) => t.transposeSemitones !== 0).length,
     [project.tracks],
@@ -456,6 +468,7 @@ function App() {
       audibleTrackCount: project.tracks.filter((t) => !t.muted && (!soloActive || t.solo)).length,
       soloTrackCount,
       soloActive,
+      lockedTrackCount,
       transposedTrackCount,
       firstTrackTransposeSemitones: project.tracks[0]?.transposeSemitones ?? null,
       scheduledFrequencyPreviewHz: [...scheduledFrequencyPreviewRef.current],
@@ -472,6 +485,7 @@ function App() {
     mutedTrackCount,
     soloTrackCount,
     soloActive,
+    lockedTrackCount,
     transposedTrackCount,
   ])
 
@@ -498,7 +512,7 @@ function App() {
     applyProjectUpdate((prev) => {
       const next = structuredClone(prev)
       const track = next.tracks.find((t) => t.id === trackId)
-      if (!track) return prev
+      if (!track || track.locked) return prev
       const lengthBeats = 2
       const desiredStart = Math.floor(Math.random() * 12)
       const startBeat = resolveNonOverlappingStart(track.clips, lengthBeats, desiredStart)
@@ -517,7 +531,7 @@ function App() {
   const removeClip = (trackId: string, clipId: string) => {
     applyProjectUpdate((prev) => {
       const track = prev.tracks.find((t) => t.id === trackId)
-      if (!track) return prev
+      if (!track || track.locked) return prev
       if (track.clips.length <= 1) return prev
 
       return {
@@ -533,7 +547,7 @@ function App() {
     applyProjectUpdate((prev) => ({
       ...prev,
       tracks: prev.tracks.map((t) => {
-        if (t.id !== trackId) return t
+        if (t.id !== trackId || t.locked) return t
         return {
           ...t,
           clips: t.clips.map((c) => {
@@ -569,6 +583,13 @@ function App() {
     }))
   }
 
+  const toggleTrackLock = (trackId: string) => {
+    applyProjectUpdate((prev) => ({
+      ...prev,
+      tracks: prev.tracks.map((t) => (t.id === trackId ? { ...t, locked: !t.locked } : t)),
+    }))
+  }
+
   const setTrackTranspose = (trackId: string, transposeSemitones: number) => {
     applyProjectUpdate((prev) => ({
       ...prev,
@@ -587,7 +608,7 @@ function App() {
     setProject((prev) => ({
       ...prev,
       tracks: prev.tracks.map((t) => {
-        if (t.id !== trackId) return t
+        if (t.id !== trackId || t.locked) return t
         const current = t.clips.find((c) => c.id === clipId)
         if (!current) return t
         const resolved = resolveNonOverlappingStart(t.clips, current.lengthBeats, startBeat, clipId)
@@ -603,7 +624,7 @@ function App() {
     setProject((prev) => ({
       ...prev,
       tracks: prev.tracks.map((t) => {
-        if (t.id !== trackId) return t
+        if (t.id !== trackId || t.locked) return t
         const current = t.clips.find((c) => c.id === clipId)
         if (!current) return t
 
@@ -643,6 +664,8 @@ function App() {
   ) => {
     if (isPlaying) return
     if (e.button !== 0) return
+    const isLocked = project.tracks.find((t) => t.id === trackId)?.locked
+    if (isLocked) return
 
     const grid = timelineRef.current
     if (!grid) return
@@ -716,6 +739,8 @@ function App() {
   ) => {
     if (isPlaying) return
     if (e.button !== 0) return
+    const isLocked = project.tracks.find((t) => t.id === trackId)?.locked
+    if (isLocked) return
     e.stopPropagation()
 
     const grid = timelineRef.current
@@ -952,7 +977,21 @@ function App() {
               >
                 {track.solo ? 'Unsolo' : 'Solo'}
               </button>
-              <button data-testid={`add-clip-${track.id}`} onClick={() => addClip(track.id)} disabled={isPlaying}>+ Clip</button>
+              <button
+                data-testid={`lock-${track.id}`}
+                onClick={() => toggleTrackLock(track.id)}
+                disabled={isPlaying}
+                aria-pressed={track.locked}
+              >
+                {track.locked ? 'Unlock' : 'Lock'}
+              </button>
+              <button
+                data-testid={`add-clip-${track.id}`}
+                onClick={() => addClip(track.id)}
+                disabled={isPlaying || track.locked}
+              >
+                + Clip
+              </button>
             </div>
 
             <div className="track-grid" ref={timelineRef}>
@@ -964,15 +1003,15 @@ function App() {
                 <button
                   key={clip.id}
                   data-testid={`clip-${track.id}-${clip.id}`}
-                  className={`clip ${clip.wave}`}
+                  className={`clip ${clip.wave} ${track.locked ? 'locked' : ''}`}
                   style={{
                     left: `${(clip.startBeat / TIMELINE_BEATS) * 100}%`,
                     width: `${(clip.lengthBeats / TIMELINE_BEATS) * 100}%`,
                   }}
-                  title={`${clip.wave} ${clip.noteHz.toFixed(2)}Hz @ beat ${clip.startBeat}（双击切换波形，Alt+双击删除）`}
+                  title={`${clip.wave} ${clip.noteHz.toFixed(2)}Hz @ beat ${clip.startBeat}${track.locked ? '（轨道已锁定）' : '（双击切换波形，Alt+双击删除）'}`}
                   onMouseDown={(e) => startClipDrag(e, track.id, clip.id, clip.startBeat, clip.lengthBeats)}
                   onDoubleClick={(e) => {
-                    if (isPlaying) return
+                    if (isPlaying || track.locked) return
                     if (e.altKey) {
                       removeClip(track.id, clip.id)
                       return
@@ -1003,7 +1042,7 @@ function App() {
         ))}
       </section>
 
-      <p className="hint">双击 clip 切换波形；Alt+双击删除。播放时禁用新增 clip 与 BPM 修改。快捷键：Space 播放/暂停，S 停止，⌘/Ctrl+Z 撤销，⌘/Ctrl+Shift+Z 重做。</p>
+      <p className="hint">双击 clip 切换波形；Alt+双击删除；Lock 可冻结轨道编辑。播放时禁用新增 clip 与 BPM 修改。快捷键：Space 播放/暂停，S 停止，⌘/Ctrl+Z 撤销，⌘/Ctrl+Shift+Z 重做。</p>
     </div>
   )
 }
