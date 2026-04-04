@@ -129,6 +129,8 @@ declare global {
       redoDepth: number
       masterLevel: number
       audioContextState: AudioContextState | 'uninitialized'
+      beatDurationSec: number
+      timelineDurationSec: number
     }
   }
 }
@@ -367,8 +369,10 @@ function App() {
       redoDepth: redoStackRef.current.length,
       masterLevel: masterLevelRef.current,
       audioContextState: audioCtxRef.current?.state ?? 'uninitialized',
+      beatDurationSec: beatDuration,
+      timelineDurationSec: totalDurationSec,
     }
-  }, [isPlaying, playheadBeat, project, totalClipCount])
+  }, [isPlaying, playheadBeat, project, totalClipCount, beatDuration, totalDurationSec])
 
   useEffect(() => {
     try {

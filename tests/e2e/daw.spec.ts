@@ -344,4 +344,18 @@ test.describe('DAW MVP e2e', () => {
     expect(after.playheadBeat).toBe(0)
     expect(after.audioContextState === 'running' || after.audioContextState === 'suspended').toBe(true)
   })
+
+  test('debug timing invariants should align beat duration with timeline duration', async ({ page }) => {
+    await page.goto('/')
+
+    const timing = await page.evaluate(() => ({
+      bpm: window.__DAW_DEBUG__?.bpm,
+      beatDurationSec: window.__DAW_DEBUG__?.beatDurationSec,
+      timelineDurationSec: window.__DAW_DEBUG__?.timelineDurationSec,
+    }))
+
+    expect(timing.bpm).toBeGreaterThan(0)
+    expect(timing.beatDurationSec).toBeCloseTo(60 / (timing.bpm ?? 120), 6)
+    expect(timing.timelineDurationSec).toBeCloseTo((timing.beatDurationSec ?? 0) * 16, 6)
+  })
 })
